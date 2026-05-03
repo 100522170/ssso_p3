@@ -204,6 +204,15 @@ int main(int argc, char *argv[]) {
   int queue_size = atoi(argv[2]);
   int parking_capacity = atoi(argv[3]);
 
+  if (queue_size <= 0) {
+    fprintf(stderr, "Error: queue size incorect\n");
+    return -1;
+  }
+  if (parking_capacity <= 0) {
+    fprintf(stderr, "Error: parking capacity incorrect\n");
+    return -1;
+  }
+
   // AVISO PERSONA C: Iniciamos la estructura Lot de la Persona B
   lot_init(&parking_lot, parking_capacity);
 
@@ -290,7 +299,11 @@ int main(int argc, char *argv[]) {
           if (is_valid_plate(plate_buf) && gate_buf >= 0 &&
               gate_buf < NUM_GATES && priority_buf >= 0 &&
               priority_buf < NUM_PRIORITIES) {
-            // Guardamos en el vector de estructuras
+            // guardamos en el vector de estruturas
+            if (car_count >= 1024) {
+              fprintf(stderr, "Error: too many cars)\n");
+              continue;
+            }
             strcpy(car_vector[car_count].plate, plate_buf);
             car_vector[car_count].gate = gate_buf;
             car_vector[car_count].priority = priority_buf;
@@ -303,7 +316,17 @@ int main(int argc, char *argv[]) {
         line[pos++] = c;
     }
   }
-  close(fd);
+
+  if (bytes_read < 0) {
+    perror("[ERROR] [parking_manager] Reading file");
+    close(fd);
+    return -1;
+  }
+
+  if (close(fd) == -1) {
+    perror("[ERROR] [parking_manager] Closing file");
+    return -1;
+  }
 
   // Volcar el vector en las colas correspondientes
   for (int i = 0; i < car_count; i++) {
