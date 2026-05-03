@@ -12,7 +12,7 @@
 #define NUM_EXIT_GATES 2
 #define NUM_ENTRY_THREADS (NUM_GATES * NUM_PRIORITIES)
 
-// ========== SECCIÓN PERSONA B: ESTRUCTURA LOT ==========
+// Estructura parking
 typedef struct {
   int capacity;
   int occupied;
@@ -74,9 +74,8 @@ void lot_release_space(Lot *l, const char *plate) {
 
   pthread_mutex_unlock(&l->mutex);
 }
-// ========== FIN SECCIÓN PERSONA B ==========
 
-// ========== SECCIÓN PERSONA C: MAIN Y THREADS ==========
+//  MAIN Y THREADS
 
 // Sincronización global para la señal de inicio del parking_manager
 pthread_mutex_t start_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -263,7 +262,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // VECTOR DE ESTRUCTURAS (Requisito del PDF)
+  // VECTOR DE ESTRUCTURAS
   struct car *car_vector =
       malloc(1024 * sizeof(struct car)); // Capacidad máxima asumida
   int car_count = 0;
@@ -349,7 +348,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // esperamos a que entry termine de procesar los coches que
+  // esperamos a que entry termine de procesar los coches
   for (int i = 0; i < NUM_GATES; i++) {
     for (int j = 0; j < NUM_PRIORITIES; j++) {
       void *ret;
@@ -369,9 +368,6 @@ int main(int argc, char *argv[]) {
     strcpy(end_car->plate, "END");
     queue_put(exit_queues[i], end_car);
   }
-
-  // (Mantén los pthread_join de exit_tids, destruye las colas y libera
-  // car_vector al final) free(car_vector);
 
   // Esperar a que terminen de salir
   for (int i = 0; i < NUM_EXIT_GATES; i++) {
