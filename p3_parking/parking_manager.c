@@ -12,7 +12,7 @@
 #define NUM_EXIT_GATES 2
 #define NUM_ENTRY_THREADS (NUM_GATES * NUM_PRIORITIES)
 
-// Estructura parking
+// Parking lot structure to manage capacity and occupation
 typedef struct {
   int capacity;
   int occupied;
@@ -23,27 +23,27 @@ typedef struct {
 
 Lot parking_lot;
 
-// Función para inicializar la estructura Lot
+// Function to initialize the parking lot structure
 void lot_init(Lot *l, int capacity) {
-  l->capacity = capacity;
-  l->occupied = 0;
+  l->capacity=capacity;
+  l->occupied=0;
 
-  for (int i = 0; i < NUM_PRIORITIES; i++) {
-    l->waiting[i] = 0;
+  for(int i=0;i<NUM_PRIORITIES;i++){
+    l->waiting[i]=0;
     pthread_cond_init(&l->cond[i], NULL);
   }
   pthread_mutex_init(&l->mutex, NULL);
 }
 
-// Función para solicitar espacio en el parking
+// Function to claim a space in the parking lot
 void lot_claim_space(Lot *l, int priority, const char *plate) {
   pthread_mutex_lock(&l->mutex);
 
   l->waiting[priority]++;
 
-  // Esperar si está lleno o si hay coches de mayor prioridad esperando
-  while (l->occupied >= l->capacity || (priority > 0 && l->waiting[0] > 0) ||
-         (priority > 1 && l->waiting[1] > 0)) {
+  // Wait here if the parking is full or if there are cars with higher priority waiting
+  while(l->occupied>=l->capacity || (priority>0 && l->waiting[0]>0) ||
+         (priority>1 && l->waiting[1]>0)){
     pthread_cond_wait(&l->cond[priority], &l->mutex);
   }
 
@@ -55,7 +55,7 @@ void lot_claim_space(Lot *l, int priority, const char *plate) {
   pthread_mutex_unlock(&l->mutex);
 }
 
-// Función para liberar espacio en el parking
+// Function to release a space in the parking lot
 void lot_release_space(Lot *l, const char *plate) {
   pthread_mutex_lock(&l->mutex);
 
@@ -63,26 +63,26 @@ void lot_release_space(Lot *l, const char *plate) {
 
   printf("[INFO] LOT RELEASED %d/%d BY %s\n", l->occupied, l->capacity, plate);
 
-  // Despertar hilos respetando la prioridad
-  if (l->waiting[0] > 0) {
+  // Wake up waiting threads strictly respecting their priority
+  if(l->waiting[0]>0){
     pthread_cond_signal(&l->cond[0]);
-  } else if (l->waiting[1] > 0) {
+  }else if(l->waiting[1]>0){
     pthread_cond_signal(&l->cond[1]);
-  } else if (l->waiting[2] > 0) {
+  }else if(l->waiting[2]>0){
     pthread_cond_signal(&l->cond[2]);
   }
 
   pthread_mutex_unlock(&l->mutex);
 }
 
-//  MAIN Y THREADS
+// ========== MAIN AND THREADS ==========
 
-// Sincronización global para la señal de inicio del parking_manager
+// Global synchronization so threads wait for the main function to finish reading the file
 pthread_mutex_t start_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t start_cond = PTHREAD_COND_INITIALIZER;
 int start_flag = 0;
 
-// Arrays de Colas para entrada y salida
+// Arrays for entry and exit queues
 queue *entry_queues[NUM_GATES][NUM_PRIORITIES];
 queue *exit_queues[NUM_EXIT_GATES];
 
@@ -99,59 +99,63 @@ typedef struct {
   queue *exit_queue;
 } ExitThreadArgs;
 
-// Función de validación de matrícula (ej: 1111-AAA)
+// Function to check if a license plate is valid (e.g., 1111-AAA)
 int is_valid_plate(const char *plate) {
-  if (strlen(plate) != 8)
+  if(strlen(plate)!=8)
     return 0;
-  for (int i = 0; i < 4; i++)
-    if (!isdigit(plate[i]))
+  for(int i=0;i<4;i++)
+    if(!isdigit(plate[i]))
       return 0;
-  if (plate[4] != '-')
+  if(plate[4]!='-')
     return 0;
-  for (int i = 5; i < 8; i++)
-    if (!isupper(plate[i]))
+  for(int i=5;i<8;i++)
+    if(!isupper(plate[i]))
       return 0;
   return 1;
 }
 
-// Hilo Gestor de Entrada
+// Thread to manage car entries
 void *entry_lane_thread(void *arg) {
   ThreadArgs *args = (ThreadArgs *)arg;
-  if (!args) {
+  if(!args){
     fprintf(stderr, "[ERROR] [entry_lane_thread] Arguments not valid\n");
     return (void *)-1;
   }
 
-  int var_lane = args->priority;
-  int var_gate = args->gate;
+  int var_lane=args->priority;
+  int var_gate=args->gate;
 
   printf("[LANE %d] [GATE %d] Waiting\n", var_lane, var_gate);
 
-  // Bloqueo hasta recibir la señal
+  // Block the thread until we receive the start signal from main
   pthread_mutex_lock(&start_mutex);
-  while (start_flag == 0) {
+  while(start_flag==0){
     pthread_cond_wait(&start_cond, &start_mutex);
   }
   pthread_mutex_unlock(&start_mutex);
 
-  while (1) {
-    // AHORA SACAMOS UN STRUCT CAR, NO UN CHAR*
+  while(1){
+    // Extract a struct car from the queue
     struct car *c = (struct car *)queue_get(args->lane_queue);
 
-    // Centinela "END"
-    if (c == NULL || strcmp(c->plate, "END") == 0) {
-      if (c != NULL)
+    // Check for the "END" marker to stop the thread
+    if(c==NULL || strcmp(c->plate, "END")==0){
+      if(c!=NULL)
         free(c);
       break;
     }
 
     printf("[LANE %d] [GATE %d] Car %s\n", var_lane, var_gate, c->plate);
 
+    // Try to get a parking space
     lot_claim_space(&parking_lot, var_lane, c->plate);
 
-    int exit_gate = var_gate % NUM_EXIT_GATES;
-    // pasamos la struct a exit y como ya no se usa, la liberamos con free
+    int exit_gate=var_gate%NUM_EXIT_GATES;
+    
+    // Put the car in the exit queue
     queue_put(exit_queues[exit_gate], c);
+    
+    // Free local memory since we already placed the car in the next queue
     free(c);
   }
 
@@ -160,30 +164,33 @@ void *entry_lane_thread(void *arg) {
   pthread_exit((void *)0);
 }
 
-// Hilo Gestor de Salida
+// Thread to manage car exits
 void *exit_gate_thread(void *arg) {
   ExitThreadArgs *args = (ExitThreadArgs *)arg;
-  if (!args) {
+  if(!args){
     fprintf(stderr, "[ERROR] [EXIT -1] Arguments not valid\n");
     return (void *)-1;
   }
 
-  int exit_gate = args->gate;
+  int exit_gate=args->gate;
 
-  while (1) {
-    // AHORA SACAMOS UN STRUCT CAR
+  while(1){
+    // Extract a struct car from the exit queue
     struct car *c = (struct car *)queue_get(args->exit_queue);
 
-    if (c == NULL || strcmp(c->plate, "END") == 0) {
-      if (c != NULL)
+    // Check for the "END" marker to stop the thread
+    if(c==NULL || strcmp(c->plate, "END")==0){
+      if(c!=NULL)
         free(c);
       break;
     }
 
     printf("[EXIT %d] CAR %s\n", exit_gate, c->plate);
 
+    // Free the parking space
     lot_release_space(&parking_lot, c->plate);
-    // la memoria no se necesita asi que se libera
+    
+    // The car is leaving the parking lot, so we finally free its memory
     free(c);
   }
 
@@ -193,207 +200,200 @@ void *exit_gate_thread(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-  // Comprobación de argumentos
-  if (argc != 4) {
+  // Check command line arguments
+  if(argc!=4){
     fprintf(stderr, "Usage: %s <input file> <queue size> <parking capacity>\n",
             argv[0]);
     return -1;
   }
 
-  int queue_size = atoi(argv[2]);
-  int parking_capacity = atoi(argv[3]);
+  int queue_size=atoi(argv[2]);
+  int parking_capacity=atoi(argv[3]);
 
-  if (queue_size <= 0) {
+  if(queue_size<=0){
     fprintf(stderr, "Error: queue size incorect\n");
     return -1;
   }
-  if (parking_capacity <= 0) {
+  if(parking_capacity<=0){
     fprintf(stderr, "Error: parking capacity incorrect\n");
     return -1;
   }
 
-  // AVISO PERSONA C: Iniciamos la estructura Lot de la Persona B
+  // NOTE FOR PERSON C: Initialize the Lot structure here before threads
   lot_init(&parking_lot, parking_capacity);
 
-  // Inicializar colas circulares de entrada y salida
-  for (int i = 0; i < NUM_GATES; i++) {
-    for (int j = 0; j < NUM_PRIORITIES; j++) {
-      entry_queues[i][j] = queue_init(queue_size);
+  // Initialize circular queues for entries and exits
+  for(int i=0;i<NUM_GATES;i++){
+    for(int j=0;j<NUM_PRIORITIES;j++){
+      entry_queues[i][j]=queue_init(queue_size);
     }
   }
-  for (int i = 0; i < NUM_EXIT_GATES; i++) {
-    exit_queues[i] = queue_init(queue_size);
+  for(int i=0;i<NUM_EXIT_GATES;i++){
+    exit_queues[i]=queue_init(queue_size);
   }
 
-  // Lanzar hilos de entrada
+  // Create and launch entry threads
   pthread_t entry_tids[NUM_GATES][NUM_PRIORITIES];
-  for (int i = 0; i < NUM_GATES; i++) {
-    for (int j = 0; j < NUM_PRIORITIES; j++) {
+  for(int i=0;i<NUM_GATES;i++){
+    for(int j=0;j<NUM_PRIORITIES;j++){
       ThreadArgs *args = malloc(sizeof(ThreadArgs));
-      args->gate = i;
-      args->priority = j;
-      args->lane_queue = entry_queues[i][j];
+      args->gate=i;
+      args->priority=j;
+      args->lane_queue=entry_queues[i][j];
 
-      if (pthread_create(&entry_tids[i][j], NULL, entry_lane_thread, args) !=
-          0) {
+      if(pthread_create(&entry_tids[i][j], NULL, entry_lane_thread, args)!=0){
         perror("[ERROR] Creating entry thread");
         return -1;
       }
     }
   }
 
-  // Lanzar hilos de salida
+  // Create and launch exit threads
   pthread_t exit_tids[NUM_EXIT_GATES];
-  for (int i = 0; i < NUM_EXIT_GATES; i++) {
+  for(int i=0;i<NUM_EXIT_GATES;i++){
     ExitThreadArgs *args = malloc(sizeof(ExitThreadArgs));
-    args->gate = i;
-    args->exit_queue = exit_queues[i];
+    args->gate=i;
+    args->exit_queue=exit_queues[i];
 
-    if (pthread_create(&exit_tids[i], NULL, exit_gate_thread, args) != 0) {
+    if(pthread_create(&exit_tids[i], NULL, exit_gate_thread, args)!=0){
       perror("[ERROR] Creating exit thread");
       return -1;
     }
   }
 
-  // Parsear fichero CSV
-  int fd = open(argv[1], O_RDONLY);
-  if (fd == -1) {
+  // Open and parse the CSV file
+  int fd=open(argv[1], O_RDONLY);
+  if(fd==-1){
     perror("[ERROR] [parking_manager] Opening file");
     return -1;
   }
 
-  // VECTOR DE ESTRUCTURAS
-  struct car *car_vector =
-      malloc(1024 * sizeof(struct car)); // Capacidad máxima asumida
-  int car_count = 0;
+  // ARRAY OF STRUCTURES: We store cars in memory first
+  struct car *car_vector = malloc(1024*sizeof(struct car)); 
+  int car_count=0;
 
   char c;
   ssize_t bytes_read;
   char line[256];
-  int pos = 0;
-  int is_first_line = 1;
+  int pos=0;
+  int is_first_line=1;
 
-  while ((bytes_read = read(fd, &c, 1)) > 0) {
-    if (c == '\n' || c == '\r') {
-      if (pos > 0) {
-        line[pos] = '\0';
-        pos = 0;
+  while((bytes_read=read(fd, &c, 1))>0){
+    if(c=='\n' || c=='\r'){
+      if(pos>0){
+        line[pos]='\0';
+        pos=0;
 
-        if (is_first_line) {
-          is_first_line = 0;
+        // Skip the CSV header line
+        if(is_first_line){
+          is_first_line=0;
           continue;
         }
 
         char plate_buf[16];
         int gate_buf, priority_buf;
 
-        if (sscanf(line, " %15[^,], %d , %d", plate_buf, &gate_buf,
-                   &priority_buf) == 3) {
-          int len = (int)strlen(plate_buf);
-          while (len > 0 && isspace(plate_buf[len - 1])) {
-            plate_buf[len - 1] = '\0';
+        if(sscanf(line, " %15[^,], %d , %d", plate_buf, &gate_buf, &priority_buf)==3){
+          int len=(int)strlen(plate_buf);
+          
+          // Clean empty spaces at the end of the plate
+          while(len>0 && isspace(plate_buf[len-1])){
+            plate_buf[len-1]='\0';
             len--;
           }
 
-          if (is_valid_plate(plate_buf) && gate_buf >= 0 &&
-              gate_buf < NUM_GATES && priority_buf >= 0 &&
-              priority_buf < NUM_PRIORITIES) {
-            // guardamos en el vector de estruturas
-            if (car_count >= 1024) {
-              fprintf(stderr, "Error: too many cars)\n");
+          // If the car data is valid, we save it
+          if(is_valid_plate(plate_buf) && gate_buf>=0 &&
+              gate_buf<NUM_GATES && priority_buf>=0 &&
+              priority_buf<NUM_PRIORITIES){
+            
+            if(car_count>=1024){
+              fprintf(stderr, "Error: too many cars\n");
               continue;
             }
             strcpy(car_vector[car_count].plate, plate_buf);
-            car_vector[car_count].gate = gate_buf;
-            car_vector[car_count].priority = priority_buf;
+            car_vector[car_count].gate=gate_buf;
+            car_vector[car_count].priority=priority_buf;
             car_count++;
           }
         }
       }
-    } else {
-      if (pos < 255)
-        line[pos++] = c;
+    }else{
+      if(pos<255)
+        line[pos++]=c;
     }
   }
 
-  if (bytes_read < 0) {
+  if(bytes_read<0){
     perror("[ERROR] [parking_manager] Reading file");
     close(fd);
     return -1;
   }
 
-  if (close(fd) == -1) {
+  if(close(fd)==-1){
     perror("[ERROR] [parking_manager] Closing file");
     return -1;
   }
 
-  // señaliza a entry para empezar
+  // Signal the entry threads so they can start reading their queues
   pthread_mutex_lock(&start_mutex);
-  start_flag = 1;
+  start_flag=1;
   pthread_cond_broadcast(&start_cond);
   pthread_mutex_unlock(&start_mutex);
 
-  // llenar la queue con coches
-  for (int i = 0; i < car_count; i++) {
-    queue_put(entry_queues[car_vector[i].gate][car_vector[i].priority],
-              &car_vector[i]);
+  // Put the cars we saved into their corresponding entry queues
+  for(int i=0;i<car_count;i++){
+    queue_put(entry_queues[car_vector[i].gate][car_vector[i].priority], &car_vector[i]);
   }
 
-  // Mandar el "centinela END" como struct
-  for (int i = 0; i < NUM_GATES; i++) {
-    for (int j = 0; j < NUM_PRIORITIES; j++) {
+  // Send the "END" marker to entry queues so threads know when to stop
+  for(int i=0;i<NUM_GATES;i++){
+    for(int j=0;j<NUM_PRIORITIES;j++){
       struct car *end_car = malloc(sizeof(struct car));
       strcpy(end_car->plate, "END");
       queue_put(entry_queues[i][j], end_car);
     }
   }
 
-  // esperamos a que entry termine de procesar los coches
-  for (int i = 0; i < NUM_GATES; i++) {
-    for (int j = 0; j < NUM_PRIORITIES; j++) {
+  // Wait for all entry threads to finish processing cars
+  for(int i=0;i<NUM_GATES;i++){
+    for(int j=0;j<NUM_PRIORITIES;j++){
       void *ret;
       pthread_join(entry_tids[i][j], &ret);
-      if (ret == (void *)-1) {
-        fprintf(
-            stderr,
-            "[ERROR][parking_manager] LANE %d of GATE %d FINISHED WITH ERROR\n",
-            j, i);
+      if(ret==(void *)-1){
+        fprintf(stderr, "[ERROR][parking_manager] LANE %d of GATE %d FINISHED WITH ERROR\n", j, i);
       }
     }
   }
 
-  // los coches ya han sido procesados, ahora mandamos end a exit
-  for (int i = 0; i < NUM_EXIT_GATES; i++) {
+  // Entry is complete, now send the "END" marker to the exit queues
+  for(int i=0;i<NUM_EXIT_GATES;i++){
     struct car *end_car = malloc(sizeof(struct car));
     strcpy(end_car->plate, "END");
     queue_put(exit_queues[i], end_car);
   }
 
-  // Esperar a que terminen de salir
-  for (int i = 0; i < NUM_EXIT_GATES; i++) {
+  // Wait for all exit threads to finish
+  for(int i=0;i<NUM_EXIT_GATES;i++){
     void *ret;
     pthread_join(exit_tids[i], &ret);
-    if (ret == (void *)-1) {
-      fprintf(stderr,
-              "[ERROR] [parking_manager] EXIT GATE %d FINISHED WITH ERROR\n",
-              i);
+    if(ret==(void *)-1){
+      fprintf(stderr, "[ERROR] [parking_manager] EXIT GATE %d FINISHED WITH ERROR\n", i);
     }
   }
 
-  // librerar recursos
-  for (int i = 0; i < NUM_GATES; i++) {
-    for (int j = 0; j < NUM_PRIORITIES; j++) {
+  // Clean up and free the memory used by the queues
+  for(int i=0;i<NUM_GATES;i++){
+    for(int j=0;j<NUM_PRIORITIES;j++){
       queue_destroy(entry_queues[i][j]);
     }
   }
-  for (int i = 0; i < NUM_EXIT_GATES; i++) {
+  for(int i=0;i<NUM_EXIT_GATES;i++){
     queue_destroy(exit_queues[i]);
   }
 
-  // hacemos el free para el vector de coches
+  // Free resources
   free(car_vector);
-
-  // destruimos las sincronizacionesDestroy global synchronization primitives
   pthread_mutex_destroy(&start_mutex);
   pthread_cond_destroy(&start_cond);
 
