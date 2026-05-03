@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
   int car_count = 0;
 
   char c;
-  int bytes_read;
+  ssize_t bytes_read;
   char line[256];
   int pos = 0;
   int is_first_line = 1;
@@ -272,7 +272,7 @@ int main(int argc, char *argv[]) {
         int gate_buf, priority_buf;
                 
         if (sscanf(line, " %15[^,], %d , %d", plate_buf, &gate_buf, &priority_buf) == 3) {
-          int len = strlen(plate_buf);
+          int len = (int)strlen(plate_buf);
           while(len > 0 && isspace(plate_buf[len-1])) {
             plate_buf[len-1] = '\0';
             len--;
