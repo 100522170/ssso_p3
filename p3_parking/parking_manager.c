@@ -327,17 +327,18 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Volcar el vector en las colas correspondientes
-  for (int i = 0; i < car_count; i++) {
-    queue_put(entry_queues[car_vector[i].gate][car_vector[i].priority],
-              &car_vector[i]);
-  }
-
-  // Enviar señal general para que comiencen los threads de entrada
+  // Signal entry threads to start before filling queues
+  // (must come first to avoid deadlock when queue_size < car_count in a lane)
   pthread_mutex_lock(&start_mutex);
   start_flag = 1;
   pthread_cond_broadcast(&start_cond);
   pthread_mutex_unlock(&start_mutex);
+
+  // Fill queues with cars from vector
+  for (int i = 0; i < car_count; i++) {
+    queue_put(entry_queues[car_vector[i].gate][car_vector[i].priority],
+              &car_vector[i]);
+  }
 
   // Mandar el "centinela END" como struct
   for (int i = 0; i < NUM_GATES; i++) {
