@@ -1,0 +1,15 @@
+# Test files
+test_queue.c
+
+# Build artifacts
+*.o
+*.a
+*.so
+parking
+parking_manager
+
+# Documentation
+*.md
+
+# macOS
+.DS_Store
