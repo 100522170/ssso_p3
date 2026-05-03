@@ -1,0 +1,72 @@
+{
+  "name": "SSOO Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated"
+  ],
+  "customizations": {
+    "vscode": {
+		// Set *default* container specific settings.json values on container create
+      "settings": {
+		// Disable C++ extension IntelliSense in favor of clangd
+        "C_Cpp.intelliSenseEngine": "disabled",
+        "C_Cpp.autocomplete": "disabled",
+        "C_Cpp.errorSquiggles": "disabled",
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.codeAnalysis.clangTidy.enabled": false,
+        "cmake.configureOnOpen": true,
+        "cmake.generator": "Ninja",
+		// CMake configuration
+        "cmake.cmakePath": "/usr/bin/cmake",
+        "clangd.path": "/usr/bin/clangd-20",
+        "clangd.arguments": [
+          "--header-insertion=iwyu",
+          "--completion-style=detailed",
+          "--function-arg-placeholders",
+          "--fallback-style=llvm",
+          "--clang-tidy",
+          "--suggest-missing-includes",
+          "--background-index",
+          "--log=verbose",
+          "--compile-commands-dir=/workspace/out/build/default"
+        ],
+        "clangd.onConfigChanged": "restart",
+        "clangd.serverCompletionRanking": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "xaver.clang-format",
+        "editor.suggest.insertMode": "replace",
+        "editor.acceptSuggestionOnCommitCharacter": false,
+		// File associations
+        "files.associations": {
+          "*.h": "c",
+          "*.c": "c"
+        },
+		// Language-specific settings for C
+        "[c]": {
+          "editor.defaultFormatter": "xaver.clang-format",
+          "editor.semanticHighlighting.enabled": true
+        }
+      },
+	  // Add the IDs of extensions you want installed when the container is created
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "xaver.clang-format",
+        "ms-python.python",
+        "ms-python.debugpy",
+        "vadimcn.vscode-lldb",
+        "ms-vscode.hexeditor",
+        "gruntfuggly.todo-tree",
+        "ms-vscode.test-adapter-converter",
+        "matepek.vscode-catch2-test-adapter",
+        "cschlosser.doxdocgen"
+      ]
+    }
+  }
+}
